@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MYD Trading Bot — Web</title>
+<script src="config.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { background:#0b0f19; color:#e5e7eb; }
+  .card { background:#111827; border:1px solid #1f2937; border-radius:12px; }
+  .btn { padding:8px 14px; border-radius:8px; font-weight:600; }
+  .btn-primary { background:#2563eb; color:white; }
+  .btn-danger { background:#dc2626; color:white; }
+  .btn-success { background:#16a34a; color:white; }
+  input,select { background:#1f2937; border:1px solid #374151; color:#e5e7eb; padding:8px; border-radius:8px; width:100%; }
+  .tab { cursor:pointer; padding:8px 16px; border-bottom:2px solid transparent; }
+  .tab.active { border-color:#2563eb; color:#60a5fa; }
+</style>
+</head>
+<body class="min-h-screen relative overflow-hidden">
+<canvas id="matrix" class="fixed inset-0 w-full h-full z-0 opacity-40"></canvas>
+<canvas id="chartBg" class="fixed inset-0 w-full h-full z-[1] opacity-30 pointer-events-none"></canvas>
+<div class="fixed top-4 left-1/2 -translate-x-1/2 z-[15] pointer-events-none">
+  <img src="/static/My_photo.jpg" alt="bg" class="w-56 h-56 rounded-full object-cover border-4 border-green-500 drop-shadow-2xl opacity-95" />
+</div>
+<div id="app" class="max-w-7xl mx-auto p-4 relative z-10">
+  <!-- Login -->
+  <div id="loginView" class="flex items-center justify-center min-h-screen">
+    <div class="card p-8 w-full max-w-sm">
+      <h1 class="text-2xl font-bold mb-1">MYD Trading Bot</h1>
+      <p class="text-gray-400 text-sm mb-6">Web Edition — Coins.ph / Coins Pro</p>
+      <div class="space-y-3">
+        <input id="username" placeholder="Username" value="admin" />
+        <input id="password" type="password" placeholder="Password" value="admin123" />
+        <button class="btn btn-primary w-full" onclick="login()">Sign in</button>
+        <p id="loginErr" class="text-red-400 text-sm hidden"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="mainView" class="hidden">
+    <header class="flex items-center justify-between mb-4">
+      <h1 class="text-xl font-bold">MYD Trading Bot <span class="text-gray-500 text-sm">Web</span></h1>
+      <div class="flex items-center gap-3">
+        <span id="statusDot" class="w-2 h-2 rounded-full bg-green-500"></span>
+        <span id="lastPrice" class="font-mono text-lg">—</span>
+        <button class="btn btn-danger" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <nav class="flex gap-2 mb-4 border-b border-gray-800">
+      <div class="tab active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</div>
+      <div class="tab" data-tab="trading" onclick="showTab('trading')">Trading</div>
+      <div class="tab" data-tab="portfolio" onclick="showTab('portfolio')">Portfolio</div>
+      <div class="tab" data-tab="bots" onclick="showTab('bots')">Bots</div>
+      <div class="tab" data-tab="logs" onclick="showTab('logs')">Logs</div>
+      <div class="tab" data-tab="hl" onclick="showTab('hl')">High & Low Monitoring</div>
+      <div class="tab" data-tab="settings" onclick="showTab('settings')">Settings</div>
+    </nav>
+
+    <!-- Dashboard -->
+    <section id="tab-dashboard" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="card p-4"><div class="text-gray-400 text-xs">Last</div><div id="dLast" class="text-2xl font-bold">—</div></div>
+        <div class="card p-4"><div class="text-gray-400 text-xs">High</div><div id="dHigh" class="text-2xl font-bold">—</div></div>
+        <div class="card p-4"><div class="text-gray-400 text-xs">Low</div><div id="dLow" class="text-2xl font-bold">—</div></div>
+        <div class="card p-4"><div class="text-gray-400 text-xs">Volume</div><div id="dVol" class="text-2xl font-bold">—</div></div>
+      </div>
+      <div class="card p-4">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="font-semibold">BTC/PHP — Live Chart</h2>
+          <select id="tf" onchange="loadCandles()" style="width:120px">
+            <option value="1m">1m</option><option value="5m">5m</option>
+            <option value="1h">1h</option><option value="1d" selected>1d</option>
+          </select>
+        </div>
+        <canvas id="chart" height="320"></canvas>
+      </div>
+    </section>
+
+    <!-- Trading -->
+    <section id="tab-trading" class="hidden space-y-4">
+      <div class="card p-4 max-w-md">
+        <h2 class="font-semibold mb-3">Place Order</h2>
+        <div class="space-y-3">
+          <select id="side"><option value="buy">Buy</option><option value="sell">Sell</option></select>
+          <select id="type"><option value="limit">Limit</option><option value="market">Market</option></select>
+          <input id="amount" type="number" step="0.0001" placeholder="Amount (BTC)" />
+          <input id="price" type="number" step="0.01" placeholder="Price (PHP)" />
+          <button class="btn btn-primary w-full" onclick="placeOrder()">Place Order</button>
+          <p id="orderMsg" class="text-sm text-gray-400"></p>
+        </div>
+      </div>
+      <div class="card p-4">
+        <h2 class="font-semibold mb-2">Open Orders</h2>
+        <div id="openOrders" class="text-sm text-gray-300">Loading…</div>
+      </div>
+    </section>
+
+    <!-- Portfolio -->
+    <section id="tab-portfolio" class="hidden">
+      <div class="card p-4">
+        <h2 class="font-semibold mb-2">Balances</h2>
+        <div id="balances" class="text-sm">Loading…</div>
+      </div>
+    </section>
+
+    <!-- Bots -->
+    <section id="tab-bots" class="hidden space-y-4">
+      <div class="card p-4 max-w-md">
+        <h2 class="font-semibold mb-2">Start Bot</h2>
+        <div class="space-y-3">
+          <input id="botName" placeholder="Bot name (e.g. auto-buy-10%)" />
+          <input id="botParams" placeholder='Params JSON e.g. {"symbol":"BTC/PHP"}' />
+          <button class="btn btn-success w-full" onclick="startBot()">Start</button>
+        </div>
+      </div>
+      <div class="card p-4">
+        <h2 class="font-semibold mb-2">Bot Runs</h2>
+        <div id="botRuns" class="text-sm">Loading…</div>
+      </div>
+    </section>
+
+    <!-- Logs -->
+    <section id="tab-logs" class="hidden">
+      <div class="card p-4">
+        <h2 class="font-semibold mb-2">Trade History</h2>
+        <div id="tradeLogs" class="text-sm overflow-auto">Loading…</div>
+      </div>
+    </section>
+
+    <!-- High & Low Monitoring (iframe) -->
+    <section id="tab-hl" class="hidden">
+      <div class="card p-2">
+        <p class="text-sm text-gray-400 mb-2">Kung hindi nag-load ang iframe, buksan mo direkta: <a href="Highest_Lowest_monitoring.html" target="_blank" class="text-blue-400 underline">Highest_Lowest_monitoring.html</a></p>
+        <iframe src="Highest_Lowest_monitoring.html" style="width:100%;height:80vh;border:none;border-radius:8px;"></iframe>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="hidden">
+      <div class="card p-4 max-w-md space-y-2 text-sm text-gray-300">
+        <p><b>DRY_RUN</b> controlled by backend <code>.env</code>. While true, orders are simulated.</p>
+        <p><b>API keys</b> are stored only in backend <code>.env</code>, never in the browser.</p>
+        <p>Default login: <code>admin / admin123</code> — change in production.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const API = "";
+let token = localStorage.getItem("token");
+
+// Matrix rain effect
+(function(){
+  const c=document.getElementById("matrix");
+  const ctx=c.getContext("2d");
+  function resize(){ c.width=window.innerWidth; c.height=window.innerHeight; }
+  resize(); window.addEventListener("resize",resize);
+  const chars="アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズヅブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const fontSize=16;
+  let columns=Math.floor(c.width/fontSize);
+  let drops=Array(columns).fill(1);
+  function draw(){
+    ctx.fillStyle="rgba(11,15,25,0.05)";
+    ctx.fillRect(0,0,c.width,c.height);
+    ctx.fillStyle="#22c55e";
+    ctx.font=fontSize+"px monospace";
+    for(let i=0;i<drops.length;i++){
+      const text=chars[Math.floor(Math.random()*chars.length)];
+      ctx.fillText(text,i*fontSize,drops[i]*fontSize);
+      if(drops[i]*fontSize>c.height && Math.random()>0.975) drops[i]=0;
+      drops[i]++;
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// Animated live trading candlestick background
+(function(){
+  const c=document.getElementById("chartBg");
+  const ctx=c.getContext("2d");
+  function resize(){ c.width=window.innerWidth; c.height=window.innerHeight; }
+  resize(); window.addEventListener("resize",resize);
+  const candles=[];
+  const n=40;
+  let price=0.5;
+  for(let i=0;i<n;i++){
+    const open=price;
+    const close=open+(Math.random()-0.5)*0.14;
+    const high=Math.max(open,close)+Math.random()*0.07;
+    const low=Math.min(open,close)-Math.random()*0.07;
+    candles.push({open,close,high,low});
+    price=close;
+  }
+  let t=0;
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    // grid
+    ctx.strokeStyle="rgba(255,255,255,0.05)";
+    ctx.lineWidth=1;
+    for(let y=0;y<c.height;y+=50){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(c.width,y); ctx.stroke(); }
+    const w=c.width/n;
+    const pad=w*0.25;
+    for(let i=0;i<candles.length;i++){
+      const cd=candles[i];
+      const x=i*w+pad;
+      const bodyW=w-pad*2;
+      const scale=c.height*0.5;
+      const base=c.height*0.4;
+      const openY=c.height-(cd.open*scale+base);
+      const closeY=c.height-(cd.close*scale+base);
+      const highY=c.height-(cd.high*scale+base);
+      const lowY=c.height-(cd.low*scale+base);
+      const up=cd.close>=cd.open;
+      // wick
+      ctx.strokeStyle=up?"#16a34a":"#dc2626";
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(x+bodyW/2,highY);
+      ctx.lineTo(x+bodyW/2,lowY);
+      ctx.stroke();
+      // body
+      ctx.fillStyle=up?"#16a34a":"#dc2626";
+      const top=Math.min(openY,closeY);
+      const h=Math.abs(openY-closeY)||1;
+      ctx.fillRect(x,top,bodyW,h);
+    }
+    // shift candles slowly
+    if(t%6===0){
+      candles.shift();
+      const last=candles[candles.length-1];
+      const open=last.close;
+      const close=open+(Math.random()-0.5)*0.14;
+      const high=Math.max(open,close)+Math.random()*0.07;
+      const low=Math.min(open,close)-Math.random()*0.07;
+      candles.push({open,close,high,low});
+    }
+    t++;
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+let ws = null;
+let chart = null;
+
+function showTab(t){
+  document.querySelectorAll("section").forEach(s=>s.classList.add("hidden"));
+  document.getElementById("tab-"+t).classList.remove("hidden");
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  document.querySelector(`.tab[data-tab="${t}"]`).classList.add("active");
+  if(t==="portfolio") loadPortfolio();
+  if(t==="trading") loadOpenOrders();
+  if(t==="bots") loadBots();
+  if(t==="logs") loadLogs();
+}
+
+async function login(){
+  const u=document.getElementById("username").value;
+  const p=document.getElementById("password").value;
+  if(u==="admin" && p==="admin123"){
+    localStorage.setItem("token","admin");
+    window.location.href="myd_trading.html";
+    return;
+  }
+  document.getElementById("loginErr").textContent="Invalid credentials";
+  document.getElementById("loginErr").classList.remove("hidden");
+}
+function logout(){ localStorage.removeItem("token"); token=null; location.reload(); }
+
+function authHeaders(){ return {"Authorization":"Bearer "+token,"Content-Type":"application/json"}; }
+
+async function api(path, opts={}){
+  const r=await fetch(path,{...opts, headers:{...authHeaders(), ...(opts.headers||{})}});
+  if(r.status===401){ logout(); throw new Error("unauth"); }
+  return r.json();
+}
+
+function boot(){
+  document.getElementById("loginView").classList.add("hidden");
+  document.getElementById("mainView").classList.remove("hidden");
+  connectWS();
+  loadCandles();
+  refreshTicker();
+  setInterval(refreshTicker,5000);
+}
+
+function connectWS(){
+  const proto=location.protocol==="https:"?"wss":"ws";
+  ws=new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onmessage=(e)=>{
+    const m=JSON.parse(e.data);
+    if(m.type==="ticker"){
+      const d=m.data;
+      document.getElementById("lastPrice").textContent = d.last ? d.last.toLocaleString() : "—";
+      document.getElementById("dLast").textContent = d.last ? d.last.toLocaleString() : "—";
+      document.getElementById("dHigh").textContent = d.high ? d.high.toLocaleString() : "—";
+      document.getElementById("dLow").textContent = d.low ? d.low.toLocaleString() : "—";
+      document.getElementById("dVol").textContent = d.volume ? d.volume.toLocaleString() : "—";
+    }
+  };
+  ws.onclose=()=>setTimeout(connectWS,3000);
+}
+
+async function refreshTicker(){ try{ const d=await api("/market/ticker"); document.getElementById("lastPrice").textContent=d.last?d.last.toLocaleString():"—";}catch{} }
+
+async function loadCandles(){
+  const tf=document.getElementById("tf").value;
+  const data=await api(`/market/candles?timeframe=${tf}&limit=100`);
+  const labels=data.map(d=>new Date(d.timestamp).toLocaleDateString());
+  const closes=data.map(d=>d.close);
+  const ctx=document.getElementById("chart").getContext("2d");
+  if(chart) chart.destroy();
+  chart=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:"Close",data:closes,borderColor:"#60a5fa",tension:0.2}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+}
+
+async function placeOrder(){
+  const body={
+    side:document.getElementById("side").value,
+    type:document.getElementById("type").value,
+    amount:parseFloat(document.getElementById("amount").value),
+    price:parseFloat(document.getElementById("price").value)||null,
+  };
+  const r=await api("/orders/",{method:"POST",body:JSON.stringify(body)});
+  document.getElementById("orderMsg").textContent=JSON.stringify(r);
+  loadOpenOrders();
+}
+
+async function loadOpenOrders(){
+  const data=await api("/orders/");
+  const el=document.getElementById("openOrders");
+  if(!Array.isArray(data)||!data.length){ el.textContent="No open orders."; return;}
+  el.innerHTML=data.map(o=>`<div class="flex justify-between py-1 border-b border-gray-800">
+    <span>${o.side} ${o.amount} @ ${o.price||"market"}</span>
+    <button class="btn btn-danger text-xs" onclick="cancelOrder('${o.id}')">Cancel</button></div>`).join("");
+}
+
+async function cancelOrder(id){ await api(`/orders/${id}`,{method:"DELETE"}); loadOpenOrders(); }
+
+async function loadPortfolio(){
+  const d=await api("/portfolio/");
+  const el=document.getElementById("balances");
+  const b=d.balances||{};
+  el.innerHTML=Object.entries(b).map(([k,v])=>`<div class="flex justify-between py-1 border-b border-gray-800"><span>${k}</span><span>${v}</span></div>`).join("") || "No balances.";
+}
+
+async function startBot(){
+  const body={name:document.getElementById("botName").value, params:document.getElementById("botParams").value||"{}"};
+  await api("/bots/start",{method:"POST",body:JSON.stringify(body)});
+  loadBots();
+}
+async function loadBots(){
+  const data=await api("/bots/");
+  const el=document.getElementById("botRuns");
+  if(!Array.isArray(data)||!data.length){ el.textContent="No bot runs."; return;}
+  el.innerHTML=data.map(b=>`<div class="flex justify-between py-1 border-b border-gray-800">
+    <span>${b.name} — ${b.status}</span>
+    ${b.status==="running"?`<button class="btn btn-danger text-xs" onclick="stopBot(${b.id})">Stop</button>`:""}</div>`).join("");
+}
+async function stopBot(id){ await api(`/bots/${id}/stop`,{method:"POST"}); loadBots(); }
+
+async function loadLogs(){
+  const data=await api("/logs/trades");
+  const el=document.getElementById("tradeLogs");
+  if(!Array.isArray(data)||!data.length){ el.textContent="No logs yet."; return;}
+  el.innerHTML=`<table class="w-full text-xs"><thead><tr class="text-gray-400"><th>Time</th><th>Symbol</th><th>Side</th><th>Type</th><th>Amount</th><th>Price</th><th>Status</th></tr></thead><tbody>`+
+    data.map(r=>`<tr class="border-b border-gray-800"><td>${new Date(r.timestamp).toLocaleString()}</td><td>${r.symbol}</td><td>${r.side}</td><td>${r.type}</td><td>${r.amount}</td><td>${r.price}</td><td>${r.status}</td></tr>`).join("")+`</tbody></table>`;
+}
+
+// Always start logged out on first access — show login screen (clean state)
+localStorage.removeItem("token");
+token = null;
+
+document.addEventListener("keydown", (e)=>{
+  if(e.key==="Enter" && document.getElementById("loginView") && !document.getElementById("loginView").classList.contains("hidden")){
+    login();
+  }
+});
+</script>
+</body>
+</html>

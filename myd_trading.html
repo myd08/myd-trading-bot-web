@@ -1,0 +1,1404 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MYD Trading Bot</title>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root {
+    --bg:#0b1220;
+    --panel:#121c2e;
+    --panel2:#18253a;
+    --border:#263750;
+    --text:#e8eef8;
+    --muted:#91a2ba;
+    --green:#00c087;
+    --red:#f0445e;
+    --blue:#3988ff;
+    --yellow:#f5b942;
+}
+* {box-sizing:border-box}
+body {
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+}
+header {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:16px 22px;
+    background:#101a2b;
+    border-bottom:1px solid var(--border);
+    flex-wrap:wrap;
+    gap:12px;
+}
+.logo {font-size:21px;font-weight:bold;color:var(--green)}
+.header-info {display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.status {font-size:12px;color:var(--muted)}
+.status.online {color:var(--green)}
+.status.offline {color:var(--red)}
+nav {
+    display:flex;
+    gap:5px;
+    padding:10px 16px;
+    background:#101a2b;
+    border-bottom:1px solid var(--border);
+    overflow-x:auto;
+}
+nav button {
+    background:transparent;
+    color:var(--muted);
+    border:0;
+    padding:11px 15px;
+    cursor:pointer;
+    border-radius:6px;
+    white-space:nowrap;
+}
+nav button.active,nav button:hover {
+    background:var(--panel2);
+    color:var(--green);
+}
+main {padding:20px;max-width:1500px;margin:auto}
+.tab {display:none}
+.tab.active {display:block}
+h2 {font-size:20px;margin:0 0 18px}
+h3 {font-size:15px;margin:0 0 14px}
+.cards {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:14px;
+    margin-bottom:18px;
+}
+.card,.panel {
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:17px;
+}
+.card small {color:var(--muted)}
+.card .value {
+    font-size:23px;
+    font-weight:bold;
+    margin-top:10px;
+    overflow-wrap:anywhere;
+}
+.green {color:var(--green)}
+.red {color:var(--red)}
+.yellow {color:var(--yellow)}
+.muted {color:var(--muted)}
+.dashboard-grid {
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    gap:16px;
+}
+.chart-wrap {height:340px;position:relative}
+.row {
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    align-items:center;
+}
+.row > * {flex:1}
+input,select {
+    width:100%;
+    padding:11px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    background:#0b1526;
+    color:var(--text);
+    margin:6px 0 13px;
+}
+label {font-size:12px;color:var(--muted)}
+button.action {
+    border:0;
+    border-radius:6px;
+    padding:11px 16px;
+    cursor:pointer;
+    color:white;
+    font-weight:bold;
+}
+button.buy {background:#078b68}
+button.sell {background:#c93650}
+button.blue {background:#286bd0}
+button.gray {background:#40516a}
+button:disabled {opacity:.45;cursor:not-allowed}
+.trade-grid {
+    display:grid;
+    grid-template-columns:minmax(260px,360px) minmax(0,1fr);
+    gap:16px;
+}
+table {
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+}
+th,td {
+    padding:11px 9px;
+    text-align:left;
+    border-bottom:1px solid var(--border);
+}
+th {color:var(--muted);font-weight:normal}
+.table-wrap {overflow-x:auto}
+.message {font-size:13px;margin-top:10px;line-height:1.5}
+.timeframes {display:flex;gap:6px;margin-bottom:12px}
+.timeframes button {
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--muted);
+    border-radius:5px;
+    padding:7px 12px;
+    cursor:pointer;
+}
+.timeframes button.active {
+    color:var(--green);
+    border-color:var(--green);
+}
+.section-gap {margin-top:18px}
+
+.converter-panel {margin-top:16px}
+.converter-result {
+    margin-top:10px;
+    padding:14px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:#0b1526;
+}
+.converter-result .result-value {
+    font-size:22px;
+    font-weight:bold;
+    color:var(--green);
+    margin-top:6px;
+    overflow-wrap:anywhere;
+}
+
+footer {
+    color:var(--muted);
+    font-size:11px;
+    text-align:center;
+    padding:25px;
+}
+@media(max-width:800px) {
+    .trade-grid {grid-template-columns:1fr}
+    main {padding:12px}
+    .chart-wrap {height:260px}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <div class="logo">MYD TRADING BOT</div>
+    <div class="header-info">
+        <div>
+            <div class="status" id="connectionStatus">Connecting to Coins.ph...</div>
+            <small class="muted">BTC/PHP Market</small>
+        </div>
+        <div>
+            <small class="muted">Latest Price</small>
+            <div id="headerPrice" class="green">---</div>
+        </div>
+        <button class="action gray" type="button" onclick="logout()">Logout</button>
+    </div>
+</header>
+
+<nav>
+    <button class="active" onclick="showTab('dashboard',this)">Dashboard</button>
+    <button onclick="showTab('trading',this)">Trading</button>
+    <button onclick="showTab('portfolio',this)">Portfolio</button>
+    <button onclick="showTab('bots',this)">Bots</button>
+    <button onclick="showTab('logs',this)">Logs</button>
+    <button onclick="showTab('monitoring',this)">High & Low Monitoring</button>
+</nav>
+
+<main>
+
+<!-- DASHBOARD -->
+<section id="dashboard" class="tab active">
+    <h2>Dashboard Overview</h2>
+
+    <div class="cards">
+        <div class="card">
+            <small>Last Price (PHP)</small>
+            <div class="value green" id="dashLast">---</div>
+        </div>
+        <div class="card">
+            <small>24H High (PHP)</small>
+            <div class="value" id="dashHigh">---</div>
+        </div>
+        <div class="card">
+            <small>24H Low (PHP)</small>
+            <div class="value" id="dashLow">---</div>
+        </div>
+        <div class="card">
+            <small>24H Volume (BTC)</small>
+            <div class="value" id="dashVolume">---</div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="row">
+            <div>
+                <h3>BTC/PHP Coins.ph Market Chart</h3>
+                <small class="muted" id="chartStatus">Loading market chart...</small>
+            </div>
+        </div>
+
+        <div class="timeframes">
+            <button class="active" onclick="changeTimeframe('1m',this)">1m</button>
+            <button onclick="changeTimeframe('5m',this)">5m</button>
+            <button onclick="changeTimeframe('1h',this)">1h</button>
+            <button onclick="changeTimeframe('1d',this)">1d</button>
+        </div>
+
+        <div class="chart-wrap">
+            <canvas id="marketChart"></canvas>
+        </div>
+    </div>
+
+    <div class="panel section-gap">
+        <h3>Market Information</h3>
+        <div class="row">
+            <div>
+                <small class="muted">Best Bid</small>
+                <div id="dashBid" class="green">---</div>
+            </div>
+            <div>
+                <small class="muted">Best Ask</small>
+                <div id="dashAsk" class="red">---</div>
+            </div>
+            <div>
+                <small class="muted">Last Update</small>
+                <div id="dashUpdated">---</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- TRADING -->
+<section id="trading" class="tab">
+    <h2>Trading — Paper Trading</h2>
+
+    <div class="cards">
+        <div class="card">
+            <small>Available PHP</small>
+            <div class="value" id="tradePHP">₱0.00</div>
+        </div>
+        <div class="card">
+            <small>Available BTC</small>
+            <div class="value" id="tradeBTC">0 BTC</div>
+        </div>
+        <div class="card">
+            <small>Market Price</small>
+            <div class="value green" id="tradeMarketPrice">---</div>
+        </div>
+    </div>
+
+    <div class="trade-grid">
+        <div class="panel">
+            <h3>Place Order</h3>
+
+            <label>Order Side</label>
+            <select id="orderSide">
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+            </select>
+
+            <label>Order Type</label>
+            <select id="orderType" onchange="updateOrderFields()">
+                <option value="MARKET">Market</option>
+                <option value="LIMIT">Limit</option>
+                <option value="STOP_LOSS">Stop-Loss</option>
+                <option value="STOP_LIMIT">Stop-Limit</option>
+            </select>
+
+            <div id="limitField" style="display:none">
+                <label>Limit Price (PHP)</label>
+                <input type="number" id="limitPrice" min="0" step="any" placeholder="Enter limit price">
+            </div>
+
+            <div id="stopField" style="display:none">
+                <label>Stop Price (PHP)</label>
+                <input type="number" id="stopPrice" min="0" step="any" placeholder="Enter stop price">
+            </div>
+
+            <div id="stopLimitField" style="display:none">
+                <label>Stop-Limit Price (PHP)</label>
+                <input type="number" id="stopLimitPrice" min="0" step="any" placeholder="Enter stop-limit price">
+            </div>
+
+            <label>Amount (BTC)</label>
+            <input type="number" id="orderAmount" min="0" step="any" placeholder="Enter BTC amount">
+
+            <button class="action buy" style="width:100%" onclick="placeOrder()">Place Order</button>
+            <div class="message muted" id="orderMessage">
+                Orders use virtual balances only. No real Coins.ph transaction will be made.
+            </div>
+
+            <div class="panel converter-panel">
+                <h3>BTC / PESO Converter</h3>
+                <label for="conversionType">Conversion Type</label>
+                <select id="conversionType" onchange="updateConverterLabel()">
+                    <option value="BTC_TO_PHP">BTC to PESO</option>
+                    <option value="PHP_TO_BTC">PESO to BTC</option>
+                </select>
+
+                <label for="manualBtcPhpRate">Manual BTC/PHP Rate (₱ per 1 BTC)</label>
+                <input type="number" id="manualBtcPhpRate" min="0" step="any"
+                       placeholder="Example: 5000000">
+
+                <label id="conversionAmountLabel" for="conversionAmount">Amount (BTC)</label>
+                <input type="number" id="conversionAmount" min="0" step="any"
+                       placeholder="Enter BTC amount">
+
+                <button class="action blue" type="button" style="width:100%"
+                        onclick="convertCurrency()">CONVERT</button>
+
+                <div class="converter-result" aria-live="polite">
+                    <small class="muted">Converted Amount</small>
+                    <div class="result-value" id="conversionResult">---</div>
+                    <div class="message muted" id="conversionMessage">
+                        Uses the BTC/PHP rate that you enter above. No API or internet connection required. Calculator only; no balance or order will be changed.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="panel">
+                <h3>Open Orders</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Side</th>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Trigger / Price</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="openOrders">
+                            <tr><td colspan="6" class="muted">No open orders.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel section-gap">
+                <h3>Recent Trades</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Side</th>
+                                <th>Amount</th>
+                                <th>Price</th>
+                                <th>Total PHP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentTrades">
+                            <tr><td colspan="5" class="muted">No trades yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- PORTFOLIO -->
+<section id="portfolio" class="tab">
+    <h2>Portfolio</h2>
+    <div class="cards">
+        <div class="card">
+            <small>PHP Balance</small>
+            <div class="value" id="portfolioPHP">₱0.00</div>
+        </div>
+        <div class="card">
+            <small>BTC Balance</small>
+            <div class="value" id="portfolioBTC">0 BTC</div>
+        </div>
+        <div class="card">
+            <small>Estimated Total Value</small>
+            <div class="value green" id="portfolioTotal">₱0.00</div>
+        </div>
+    </div>
+    <div class="panel">
+        <h3>Asset Breakdown</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Asset</th><th>Balance</th><th>Market Value</th></tr>
+                </thead>
+                <tbody id="portfolioTable"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- BOTS -->
+<section id="bots" class="tab">
+    <h2>Trading Bots</h2>
+    <div class="panel">
+        <h3>Bot Configuration</h3>
+        <label>Bot Name</label>
+        <input type="text" id="botName" placeholder="Enter bot name">
+        <label>Parameters (JSON)</label>
+        <input type="text" id="botParams" value='{"symbol":"BTCPHP"}'>
+        <button class="action blue" onclick="startBot()">Start Bot</button>
+        <div class="message muted" id="botMessage">
+            Bot interface only. Automated strategy execution is not connected yet.
+        </div>
+    </div>
+    <div class="panel section-gap">
+        <h3>Bot Runs</h3>
+        <div id="botRuns" class="muted">No bot runs.</div>
+    </div>
+</section>
+
+<!-- LOGS -->
+<section id="logs" class="tab">
+    <h2>Trading Logs</h2>
+    <div class="panel">
+        <div class="row">
+            <h3>Activity History</h3>
+            <button class="action gray" style="flex:0 0 auto" onclick="clearLogs()">Clear Logs</button>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Date / Time</th><th>Activity</th></tr>
+                </thead>
+                <tbody id="logsTable"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- HIGH LOW MONITORING -->
+<section id="monitoring" class="tab">
+    <h2>High & Low Monitoring</h2>
+    <div class="panel" style="padding:0;overflow:hidden">
+        <iframe src="Highest_Lowest_monitoring.html"
+                style="width:100%;height:750px;border:0"
+                title="High and Low Monitoring"></iframe>
+    </div>
+</section>
+
+</main>
+
+<footer>
+    MYD Trading Bot — Paper Trading Mode. Virtual transactions only.
+</footer>
+
+<script>
+/* ==========================================
+   AUTHENTICATION GUARD
+========================================== */
+if (!localStorage.getItem("token")) {
+    window.location.replace("index.html");
+}
+
+function logout() {
+    localStorage.removeItem("token");
+    window.location.replace("index.html");
+}
+
+/* ==========================================
+   CONFIGURATION
+========================================== */
+
+const API = "https://api.pro.coins.ph/openapi/quote/v1";
+const STORAGE_KEY = "MYD_TRADING_BOT_V3";
+
+const money = n => Number(n || 0).toLocaleString("en-PH", {
+    minimumFractionDigits:2,
+    maximumFractionDigits:2
+});
+
+const btcFormat = n => Number(n || 0).toFixed(8);
+
+let market = {
+    last:0,
+    bid:0,
+    ask:0,
+    high:0,
+    low:0,
+    // null means no valid 24-hour BTC volume has been received yet.
+    volume:null,
+    updatedAt:null
+};
+
+let marketAvailable = false;
+let apiMarketAvailable = false;
+let monitoringPrice = 0;
+let monitoringPriceAt = 0;
+let monitoringSocket = null;
+let monitoringReconnectTimer = null;
+let currentTimeframe = "1m";
+let chart = null;
+
+let state = loadState();
+
+function defaultState() {
+    return {
+        php:150000,
+        btc:0.0523,
+        orders:[],
+        trades:[],
+        logs:[]
+    };
+}
+
+function loadState() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return defaultState();
+
+        const parsed = JSON.parse(saved);
+        return {
+            php:Number(parsed.php ?? 150000),
+            btc:Number(parsed.btc ?? 0.0523),
+            orders:Array.isArray(parsed.orders) ? parsed.orders : [],
+            trades:Array.isArray(parsed.trades) ? parsed.trades : [],
+            logs:Array.isArray(parsed.logs) ? parsed.logs : []
+        };
+    } catch(e) {
+        return defaultState();
+    }
+}
+
+function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function logActivity(message) {
+    state.logs.unshift({
+        time:new Date().toLocaleString(),
+        message
+    });
+    state.logs = state.logs.slice(0,200);
+    saveState();
+    renderLogs();
+}
+
+function availablePHP() {
+    const reserved = state.orders.reduce((sum,o) => sum + Number(o.reservePHP || 0),0);
+    return Math.max(0,state.php-reserved);
+}
+
+function availableBTC() {
+    const reserved = state.orders.reduce((sum,o) => sum + Number(o.reserveBTC || 0),0);
+    return Math.max(0,state.btc-reserved);
+}
+
+/* ==========================================
+   NAVIGATION
+========================================== */
+
+function showTab(id,button) {
+    document.querySelectorAll(".tab").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll("nav button").forEach(el => el.classList.remove("active"));
+
+    document.getElementById(id).classList.add("active");
+    button.classList.add("active");
+
+    if (id === "dashboard" && chart) {
+        setTimeout(() => chart.resize(),100);
+    }
+}
+
+/* ==========================================
+   MARKET DATA
+========================================== */
+
+async function apiGet(path) {
+    const response = await fetch(API + path,{cache:"no-store"});
+    if (!response.ok) {
+        throw new Error("API HTTP " + response.status);
+    }
+    return response.json();
+}
+
+/*
+ * High & Low Monitoring bridge
+ * Reuses the exact WebSocket endpoint used by Highest_Lowest_monitoring.html.
+ * It only accepts BTC/PHP updates because this emulator trades BTC/PHP.
+ */
+function connectMonitoringFeed() {
+    if (monitoringSocket && (monitoringSocket.readyState === WebSocket.OPEN ||
+        monitoringSocket.readyState === WebSocket.CONNECTING)) return;
+
+    try {
+        const _wsProto = location.protocol === "https:" ? "wss" : "ws";
+monitoringSocket = new WebSocket(`${_wsProto}://${location.host}/ws`);
+
+        monitoringSocket.onmessage = function(event) {
+            let message;
+            try { message = JSON.parse(event.data); } catch (e) { return; }
+            if (!message || message.type !== "update" || !message.data) return;
+
+            const data = message.data;
+            const symbol = String(data.symbol || "BTC/PHP").toUpperCase().replace(/\s/g, "");
+            if (symbol !== "BTC/PHP" && symbol !== "BTCPHP") return;
+
+            const current = Number(data.current);
+            if (!Number.isFinite(current) || current <= 0) return;
+
+            monitoringPrice = current;
+            monitoringPriceAt = Date.now();
+
+            // Use the monitor's live current price as a safe paper-trading quote
+            // only when the direct Coins.ph ticker + bid/ask feed is unavailable.
+            if (!apiMarketAvailable) {
+                market.last = current;
+                market.bid = current;
+                market.ask = current;
+                const high = Number(data.highest);
+                const low = Number(data.lowest);
+                if (high > 0) market.high = high;
+                if (low > 0) market.low = low;
+                market.updatedAt = new Date();
+                marketAvailable = true;
+                const status = document.getElementById("connectionStatus");
+                status.textContent = "Live Monitoring Connected — Paper Trading";
+                status.className = "status online";
+                processOrders();
+                updateMarketUI();
+                renderTrading();
+                renderPortfolio();
+            }
+        };
+
+        monitoringSocket.onerror = function() {
+            // The original High & Low page owns its own connection/status UI.
+            // This bridge will retry on close without interrupting that page.
+        };
+
+        monitoringSocket.onclose = function() {
+            monitoringSocket = null;
+            if (monitoringReconnectTimer) clearTimeout(monitoringReconnectTimer);
+            monitoringReconnectTimer = setTimeout(connectMonitoringFeed, 3000);
+        };
+    } catch (error) {
+        monitoringSocket = null;
+        if (monitoringReconnectTimer) clearTimeout(monitoringReconnectTimer);
+        monitoringReconnectTimer = setTimeout(connectMonitoringFeed, 3000);
+    }
+}
+
+async function refreshMarket() {
+    const results = await Promise.allSettled([
+        apiGet("/ticker/price?symbol=BTCPHP"),
+        apiGet("/ticker/bookTicker?symbol=BTCPHP"),
+        apiGet("/ticker/24hr?symbol=BTCPHP")
+    ]);
+
+    const ticker = results[0].status === "fulfilled" ? results[0].value : null;
+    const book = results[1].status === "fulfilled" ? results[1].value : null;
+    const stats = results[2].status === "fulfilled" ? results[2].value : null;
+
+    const last = Number(ticker?.price);
+    const bid = Number(book?.bidPrice);
+    const ask = Number(book?.askPrice);
+
+    // Coins.ph 24-hour ticker: volume is the base-asset volume (BTC),
+    // while quoteVolume is PHP. Keep the last valid BTC value if a request fails.
+    if (stats && typeof stats === "object") {
+        const statsData = stats.data && typeof stats.data === "object"
+            ? stats.data
+            : stats;
+
+        const high = Number(statsData.highPrice);
+        const low = Number(statsData.lowPrice);
+        const rawVolume = statsData.volume;
+        const volume = Number(rawVolume);
+
+        if (Number.isFinite(high) && high > 0) market.high = high;
+        if (Number.isFinite(low) && low > 0) market.low = low;
+
+        // Accept a real numeric/string volume, including 0, but never replace
+        // a previous valid reading with undefined, null, empty text, or NaN.
+        if (rawVolume !== undefined && rawVolume !== null && rawVolume !== "" &&
+            Number.isFinite(volume) && volume >= 0) {
+            market.volume = volume;
+        }
+    } else if (results[2].status === "rejected") {
+        console.warn("Coins.ph 24-hour BTC volume request failed:", results[2].reason);
+    }
+
+    const tickerOK = Number.isFinite(last) && last > 0;
+    const bookOK = Number.isFinite(bid) && bid > 0 && Number.isFinite(ask) && ask > 0;
+    apiMarketAvailable = tickerOK && bookOK;
+
+    if (apiMarketAvailable) {
+        market.last = last;
+        market.bid = bid;
+        market.ask = ask;
+        market.updatedAt = new Date();
+        marketAvailable = true;
+        document.getElementById("connectionStatus").textContent = "Coins.ph Connected";
+        document.getElementById("connectionStatus").className = "status online";
+    } else {
+        const monitoringFresh = monitoringPrice > 0 && (Date.now() - monitoringPriceAt) <= 10000;
+        if (monitoringFresh) {
+            market.last = monitoringPrice;
+            market.bid = monitoringPrice;
+            market.ask = monitoringPrice;
+            market.updatedAt = new Date(monitoringPriceAt);
+            marketAvailable = true;
+            document.getElementById("connectionStatus").textContent = "Live Monitoring Connected — Paper Trading";
+            document.getElementById("connectionStatus").className = "status online";
+        } else {
+            marketAvailable = false;
+            document.getElementById("connectionStatus").textContent = tickerOK
+                ? "Partial Market Data — Trading Paused"
+                : "Market Data Unavailable — Waiting for Live Monitoring";
+            document.getElementById("connectionStatus").className = "status offline";
+        }
+    }
+
+    if (marketAvailable) processOrders();
+    updateMarketUI();
+    renderTrading();
+    renderPortfolio();
+}
+
+function updateMarketUI() {
+    const last = market.last > 0 ? "₱" + money(market.last) : "---";
+    const high = market.high > 0 ? "₱" + money(market.high) : "---";
+    const low = market.low > 0 ? "₱" + money(market.low) : "---";
+    const volume = Number.isFinite(market.volume) && market.volume >= 0
+        ? btcFormat(market.volume)
+        : "Waiting for 24H BTC volume...";
+
+    document.getElementById("dashLast").textContent = last;
+    document.getElementById("dashHigh").textContent = high;
+    document.getElementById("dashLow").textContent = low;
+    document.getElementById("dashVolume").textContent = volume;
+
+    document.getElementById("headerPrice").textContent = last;
+    document.getElementById("tradeMarketPrice").textContent = last;
+
+    document.getElementById("dashBid").textContent =
+        market.bid > 0 ? "₱" + money(market.bid) : "---";
+
+    document.getElementById("dashAsk").textContent =
+        market.ask > 0 ? "₱" + money(market.ask) : "---";
+
+    document.getElementById("dashUpdated").textContent =
+        market.updatedAt ? market.updatedAt.toLocaleTimeString() : "---";
+}
+
+/* ==========================================
+   MARKET CHART
+========================================== */
+
+function initChart() {
+    const ctx = document.getElementById("marketChart");
+
+    chart = new Chart(ctx,{
+        type:"line",
+        data:{
+            labels:[],
+            datasets:[{
+                label:"BTC/PHP",
+                data:[],
+                borderColor:"#00c087",
+                backgroundColor:"rgba(0,192,135,0.10)",
+                borderWidth:2,
+                pointRadius:0,
+                fill:true,
+                tension:0.15
+            }]
+        },
+        options:{
+            responsive:true,
+            maintainAspectRatio:false,
+            animation:false,
+            interaction:{intersect:false,mode:"index"},
+            plugins:{
+                legend:{labels:{color:"#91a2ba"}},
+                tooltip:{enabled:true}
+            },
+            scales:{
+                x:{
+                    ticks:{color:"#91a2ba",maxTicksLimit:10},
+                    grid:{color:"rgba(145,162,186,0.08)"}
+                },
+                y:{
+                    ticks:{color:"#91a2ba"},
+                    grid:{color:"rgba(145,162,186,0.08)"}
+                }
+            }
+        }
+    });
+}
+
+async function loadCandles() {
+    const status = document.getElementById("chartStatus");
+    status.textContent = "Loading " + currentTimeframe + " chart...";
+
+    try {
+        const data = await apiGet(
+            "/klines?symbol=BTCPHP&interval=" + currentTimeframe + "&limit=60"
+        );
+
+        if (!Array.isArray(data) || !data.length) {
+            throw new Error("No candle data returned.");
+        }
+
+        const labels = data.map(c => {
+            const d = new Date(Number(c[0]));
+            if (currentTimeframe === "1d") {
+                return d.toLocaleDateString();
+            }
+            return d.toLocaleTimeString();
+        });
+
+        const prices = data.map(c => Number(c[4]));
+
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = prices;
+        chart.update("none");
+
+        status.textContent = "BTC/PHP market chart — " + currentTimeframe;
+    } catch(error) {
+        status.textContent = "Chart unavailable: " + error.message;
+    }
+}
+
+function changeTimeframe(timeframe,button) {
+    currentTimeframe = timeframe;
+
+    document.querySelectorAll(".timeframes button").forEach(b => {
+        b.classList.remove("active");
+    });
+
+    button.classList.add("active");
+    loadCandles();
+}
+
+/* ==========================================
+   ORDER FORM
+========================================== */
+
+function updateOrderFields() {
+    const type = document.getElementById("orderType").value;
+
+    document.getElementById("limitField").style.display =
+        (type === "LIMIT" || type === "STOP_LIMIT") ? "block" : "none";
+
+    document.getElementById("stopField").style.display =
+        (type === "STOP_LOSS" || type === "STOP_LIMIT") ? "block" : "none";
+
+    document.getElementById("stopLimitField").style.display =
+        type === "STOP_LIMIT" ? "block" : "none";
+}
+
+function placeOrder() {
+    const side = document.getElementById("orderSide").value;
+    const type = document.getElementById("orderType").value;
+    const amount = Number(document.getElementById("orderAmount").value);
+
+    const limitPrice = Number(document.getElementById("limitPrice").value);
+    const stopPrice = Number(document.getElementById("stopPrice").value);
+    const stopLimitPrice = Number(document.getElementById("stopLimitPrice").value);
+
+    const message = document.getElementById("orderMessage");
+
+    if (!marketAvailable) {
+        message.textContent = "Market data is unavailable. Please wait for Coins.ph connection.";
+        return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        message.textContent = "Please enter a valid BTC amount.";
+        return;
+    }
+
+    let reservePHP = 0;
+    let reserveBTC = 0;
+
+    if (type === "MARKET") {
+        const price = side === "BUY" ? market.ask : market.bid;
+        if (side === "BUY" && availablePHP() < amount * price) {
+            message.textContent = "Insufficient available PHP balance.";
+            return;
+        }
+        if (side === "SELL" && availableBTC() < amount) {
+            message.textContent = "Insufficient available BTC balance.";
+            return;
+        }
+
+        executeTrade(side,amount,price,"MARKET");
+        message.textContent = "Market paper trade completed.";
+        return;
+    }
+
+    if (type === "LIMIT") {
+        if (limitPrice <= 0) {
+            message.textContent = "Enter a valid limit price.";
+            return;
+        }
+        if (side === "BUY") {
+            reservePHP = amount * limitPrice;
+            if (availablePHP() < reservePHP) {
+                message.textContent = "Insufficient PHP to reserve this order.";
+                return;
+            }
+        } else {
+            reserveBTC = amount;
+            if (availableBTC() < reserveBTC) {
+                message.textContent = "Insufficient BTC to reserve this order.";
+                return;
+            }
+        }
+    }
+
+    if (type === "STOP_LOSS") {
+        if (stopPrice <= 0) {
+            message.textContent = "Enter a valid stop price.";
+            return;
+        }
+        if (side === "BUY") {
+            reservePHP = amount * stopPrice;
+            if (availablePHP() < reservePHP) {
+                message.textContent = "Insufficient PHP to reserve this order.";
+                return;
+            }
+        } else {
+            reserveBTC = amount;
+            if (availableBTC() < reserveBTC) {
+                message.textContent = "Insufficient BTC to reserve this order.";
+                return;
+            }
+        }
+    }
+
+    if (type === "STOP_LIMIT") {
+        if (stopPrice <= 0 || stopLimitPrice <= 0) {
+            message.textContent = "Enter valid Stop Price and Stop-Limit Price.";
+            return;
+        }
+        if (side === "BUY") {
+            reservePHP = amount * stopLimitPrice;
+            if (availablePHP() < reservePHP) {
+                message.textContent = "Insufficient PHP to reserve this order.";
+                return;
+            }
+        } else {
+            reserveBTC = amount;
+            if (availableBTC() < reserveBTC) {
+                message.textContent = "Insufficient BTC to reserve this order.";
+                return;
+            }
+        }
+    }
+
+    const order = {
+        id:Date.now() + Math.floor(Math.random()*1000),
+        side,
+        type,
+        amount,
+        limitPrice:type === "LIMIT" ? limitPrice : stopLimitPrice,
+        stopPrice:type === "STOP_LOSS" || type === "STOP_LIMIT" ? stopPrice : 0,
+        activated:false,
+        reservePHP,
+        reserveBTC,
+        createdAt:new Date().toLocaleString()
+    };
+
+    state.orders.unshift(order);
+    saveState();
+    logActivity(side + " " + type + " order placed: " + btcFormat(amount) + " BTC");
+
+    message.textContent = "Order placed successfully. Waiting for market conditions.";
+    document.getElementById("orderAmount").value = "";
+
+    renderTrading();
+    renderPortfolio();
+}
+
+/* ==========================================
+   BTC / PHP CONVERTER
+========================================== */
+
+function updateConverterLabel() {
+    const type = document.getElementById("conversionType").value;
+    const label = document.getElementById("conversionAmountLabel");
+    const input = document.getElementById("conversionAmount");
+
+    if (type === "BTC_TO_PHP") {
+        label.textContent = "Amount (BTC)";
+        input.placeholder = "Enter BTC amount";
+    } else {
+        label.textContent = "Amount (PHP)";
+        input.placeholder = "Enter peso amount";
+    }
+
+    document.getElementById("conversionResult").textContent = "---";
+    document.getElementById("conversionMessage").textContent =
+        "Enter an amount and press CONVERT.";
+}
+
+function convertCurrency() {
+    const type = document.getElementById("conversionType").value;
+    const amount = Number(document.getElementById("conversionAmount").value);
+    const rate = Number(document.getElementById("manualBtcPhpRate").value);
+    const result = document.getElementById("conversionResult");
+    const message = document.getElementById("conversionMessage");
+
+    if (!Number.isFinite(rate) || rate <= 0) {
+        result.textContent = "---";
+        message.textContent = "Please enter a valid manual BTC/PHP rate greater than zero.";
+        document.getElementById("manualBtcPhpRate").focus();
+        return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        result.textContent = "---";
+        message.textContent = "Please enter a valid amount greater than zero.";
+        document.getElementById("conversionAmount").focus();
+        return;
+    }
+
+    if (type === "BTC_TO_PHP") {
+        const pesoAmount = amount * rate;
+        result.textContent = "₱" + money(pesoAmount);
+        message.textContent = btcFormat(amount) + " BTC × ₱" + money(rate) + " per BTC";
+    } else {
+        const btcAmount = amount / rate;
+        result.textContent = btcFormat(btcAmount) + " BTC";
+        message.textContent = "₱" + money(amount) + " ÷ ₱" + money(rate) + " per BTC";
+    }
+}
+
+/* ==========================================
+   ORDER PROCESSING
+========================================== */
+
+function processOrders() {
+    if (!marketAvailable) return;
+
+    const remaining = [];
+
+    for (const order of state.orders) {
+        let execute = false;
+        let executionPrice = 0;
+
+        const bid = market.bid;
+        const ask = market.ask;
+
+        if (order.type === "LIMIT") {
+            if (order.side === "BUY" && ask <= order.limitPrice) {
+                execute = true;
+                executionPrice = ask;
+            }
+            if (order.side === "SELL" && bid >= order.limitPrice) {
+                execute = true;
+                executionPrice = bid;
+            }
+        }
+
+        if (order.type === "STOP_LOSS") {
+            if (order.side === "SELL" && bid <= order.stopPrice) {
+                execute = true;
+                executionPrice = bid;
+            }
+            if (order.side === "BUY" && ask >= order.stopPrice) {
+                execute = true;
+                executionPrice = ask;
+            }
+        }
+
+        if (order.type === "STOP_LIMIT") {
+            if (!order.activated) {
+                if (order.side === "SELL" && bid <= order.stopPrice) {
+                    order.activated = true;
+                }
+                if (order.side === "BUY" && ask >= order.stopPrice) {
+                    order.activated = true;
+                }
+            }
+
+            if (order.activated) {
+                if (order.side === "SELL" && bid >= order.limitPrice) {
+                    execute = true;
+                    executionPrice = bid;
+                }
+                if (order.side === "BUY" && ask <= order.limitPrice) {
+                    execute = true;
+                    executionPrice = ask;
+                }
+            }
+        }
+
+        if (execute) {
+            const originalOrders = state.orders;
+            state.orders = originalOrders.filter(o => o.id !== order.id);
+
+            const success = executeTrade(
+                order.side,
+                order.amount,
+                executionPrice,
+                order.type
+            );
+
+            if (!success) {
+                state.orders = originalOrders;
+                remaining.push(order);
+            }
+        } else {
+            remaining.push(order);
+        }
+    }
+
+    state.orders = remaining;
+    saveState();
+    renderTrading();
+    renderPortfolio();
+}
+
+function executeTrade(side,amount,price,type) {
+    if (!(price > 0) || !(amount > 0)) return false;
+
+    const total = amount * price;
+
+    if (side === "BUY") {
+        if (availablePHP() < total) {
+            logActivity("Order failed: insufficient PHP balance.");
+            return false;
+        }
+
+        state.php -= total;
+        state.btc += amount;
+    } else {
+        if (availableBTC() < amount) {
+            logActivity("Order failed: insufficient BTC balance.");
+            return false;
+        }
+
+        state.btc -= amount;
+        state.php += total;
+    }
+
+    state.trades.unshift({
+        time:new Date().toLocaleString(),
+        side,
+        amount,
+        price,
+        total,
+        type
+    });
+
+    state.trades = state.trades.slice(0,200);
+
+    saveState();
+    logActivity(side + " " + type + " executed: " + btcFormat(amount) +
+        " BTC at ₱" + money(price));
+
+    return true;
+}
+
+function cancelOrder(id) {
+    const order = state.orders.find(o => o.id === id);
+    if (!order) return;
+
+    state.orders = state.orders.filter(o => o.id !== id);
+    saveState();
+
+    logActivity("Order cancelled: " + order.side + " " + order.type);
+    renderTrading();
+    renderPortfolio();
+}
+
+/* ==========================================
+   RENDER TRADING
+========================================== */
+
+function renderTrading() {
+    document.getElementById("tradePHP").textContent = "₱" + money(availablePHP());
+    document.getElementById("tradeBTC").textContent = btcFormat(availableBTC()) + " BTC";
+
+    const orders = document.getElementById("openOrders");
+
+    if (!state.orders.length) {
+        orders.innerHTML = '<tr><td colspan="6" class="muted">No open orders.</td></tr>';
+    } else {
+        orders.innerHTML = state.orders.map(o => {
+            let priceText = "---";
+
+            if (o.type === "LIMIT") priceText = "₱" + money(o.limitPrice);
+            if (o.type === "STOP_LOSS") priceText = "Stop ₱" + money(o.stopPrice);
+            if (o.type === "STOP_LIMIT") {
+                priceText = "Stop ₱" + money(o.stopPrice) +
+                    " / Limit ₱" + money(o.limitPrice);
+            }
+
+            return `
+                <tr>
+                    <td class="${o.side === "BUY" ? "green" : "red"}">${o.side}</td>
+                    <td>${o.type}</td>
+                    <td>${btcFormat(o.amount)}</td>
+                    <td>${priceText}</td>
+                    <td>${o.activated ? "Triggered" : "Pending"}</td>
+                    <td><button class="action gray" onclick="cancelOrder(${o.id})">Cancel</button></td>
+                </tr>
+            `;
+        }).join("");
+    }
+
+    const trades = document.getElementById("recentTrades");
+
+    if (!state.trades.length) {
+        trades.innerHTML = '<tr><td colspan="5" class="muted">No trades yet.</td></tr>';
+    } else {
+        trades.innerHTML = state.trades.slice(0,15).map(t => `
+            <tr>
+                <td>${t.time}</td>
+                <td class="${t.side === "BUY" ? "green" : "red"}">${t.side}</td>
+                <td>${btcFormat(t.amount)}</td>
+                <td>₱${money(t.price)}</td>
+                <td>₱${money(t.total)}</td>
+            </tr>
+        `).join("");
+    }
+}
+
+/* ==========================================
+   PORTFOLIO
+========================================== */
+
+function renderPortfolio() {
+    const btcValue = state.btc * market.last;
+    const total = state.php + btcValue;
+
+    document.getElementById("portfolioPHP").textContent = "₱" + money(state.php);
+    document.getElementById("portfolioBTC").textContent = btcFormat(state.btc) + " BTC";
+    document.getElementById("portfolioTotal").textContent = "₱" + money(total);
+
+    document.getElementById("portfolioTable").innerHTML = `
+        <tr>
+            <td>PHP</td>
+            <td>₱${money(state.php)}</td>
+            <td>₱${money(state.php)}</td>
+        </tr>
+        <tr>
+            <td>BTC</td>
+            <td>${btcFormat(state.btc)} BTC</td>
+            <td>₱${money(btcValue)}</td>
+        </tr>
+    `;
+}
+
+/* ==========================================
+   LOGS
+========================================== */
+
+function renderLogs() {
+    const table = document.getElementById("logsTable");
+
+    if (!state.logs.length) {
+        table.innerHTML = '<tr><td colspan="2" class="muted">No activity yet.</td></tr>';
+        return;
+    }
+
+    table.innerHTML = state.logs.map(log => `
+        <tr>
+            <td>${log.time}</td>
+            <td>${escapeHTML(log.message)}</td>
+        </tr>
+    `).join("");
+}
+
+function clearLogs() {
+    if (!confirm("Clear all trading logs?")) return;
+    state.logs = [];
+    saveState();
+    renderLogs();
+}
+
+function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        '"':"&quot;",
+        "'":"&#039;"
+    })[char]);
+}
+
+/* ==========================================
+   BOTS PLACEHOLDER
+========================================== */
+
+function startBot() {
+    const name = document.getElementById("botName").value.trim();
+    const params = document.getElementById("botParams").value;
+    const message = document.getElementById("botMessage");
+
+    if (!name) {
+        message.textContent = "Please enter a bot name.";
+        return;
+    }
+
+    try {
+        JSON.parse(params);
+    } catch(e) {
+        message.textContent = "Invalid JSON parameters.";
+        return;
+    }
+
+    const runs = document.getElementById("botRuns");
+    const entry = document.createElement("div");
+    entry.className = "message";
+    entry.textContent = name + " — Configuration saved (simulation only) — " +
+        new Date().toLocaleString();
+
+    if (runs.textContent === "No bot runs.") runs.innerHTML = "";
+    runs.prepend(entry);
+
+    message.textContent = "Bot configuration added. Automated execution is not connected.";
+    logActivity("Bot configuration created: " + name);
+}
+
+/* ==========================================
+   START APPLICATION
+========================================== */
+
+async function initializeApp() {
+    connectMonitoringFeed();
+    initChart();
+
+    renderTrading();
+    renderPortfolio();
+    renderLogs();
+    updateMarketFieldsOnStart();
+    updateConverterLabel();
+
+    await refreshMarket();
+    await loadCandles();
+
+    setInterval(refreshMarket,3000);
+    setInterval(loadCandles,30000);
+}
+
+function updateMarketFieldsOnStart() {
+    updateMarketUI();
+}
+
+initializeApp();
+
+</script>
+</body>
+</html>

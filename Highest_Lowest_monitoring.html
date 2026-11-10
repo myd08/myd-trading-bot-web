@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HL Price Checker — Web (Standalone)</title>
+<script src="config.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#0b0f19; color:#e5e7eb; }
+  .card { background:#111827; border:1px solid #1f2937; border-radius:12px; }
+  .btn { padding:8px 14px; border-radius:8px; font-weight:600; }
+  .btn-primary { background:#2563eb; color:white; }
+  .btn-danger { background:#dc2626; color:white; }
+  .btn-success { background:#16a34a; color:white; }
+  input,select { background:#1f2937; border:1px solid #374151; color:#e5e7eb; padding:8px; border-radius:8px; width:100%; }
+  .log { font-family:monospace; font-size:12px; max-height:320px; overflow:auto; }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-6xl mx-auto p-4">
+  <header class="flex items-center justify-between mb-4">
+    <h1 class="text-xl font-bold">BTC/PHP Highest–Lowest Checker <span class="text-gray-500 text-sm">Web (Standalone)</span></h1>
+    <div class="flex items-center gap-2">
+      <span id="statusDot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+      <span id="statusText" class="text-sm text-gray-400">stopped</span>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+    <div class="card p-4 space-y-3">
+      <h2 class="font-semibold">📅 Time Frame</h2>
+      <select id="tf">
+        <option value="1M">1 Minute</option>
+        <option value="5M">5 Minutes</option>
+        <option value="10M">10 Minutes</option>
+        <option value="15M">15 Minutes</option>
+        <option value="30M">30 Minutes</option>
+        <option value="1H" selected>1 Hour</option>
+        <option value="2H">2 Hours</option>
+        <option value="12H">12 Hours</option>
+        <option value="custom">Custom (ex. 1D, 4H, 3M)</option>
+      </select>
+      <input id="customTf" placeholder="Custom time frame" class="hidden" />
+      <div class="flex gap-2">
+        <button class="btn btn-success flex-1" onclick="start()">Start</button>
+        <button class="btn btn-danger flex-1" onclick="stop()">Stop</button>
+      </div>
+    </div>
+
+    <div class="card p-4 space-y-3">
+      <h2 class="font-semibold">🧮 Percentage Calc</h2>
+      <select id="calcMode">
+        <option value="1">Low → High (increase)</option>
+        <option value="2">High → Low (decrease)</option>
+      </select>
+      <input id="calcLow" type="number" step="0.01" placeholder="Low price" />
+      <input id="calcHigh" type="number" step="0.01" placeholder="High price" />
+      <button class="btn btn-primary w-full" onclick="calc()">Calculate</button>
+      <p id="calcResult" class="text-sm text-green-400"></p>
+    </div>
+
+    <div class="card p-4 space-y-2">
+      <h2 class="font-semibold">Live Summary</h2>
+      <div><span class="text-gray-400 text-xs">Current</span><div id="cur" class="text-2xl font-bold">—</div></div>
+      <div><span class="text-gray-400 text-xs">Highest (Resistance)</span><div id="high" class="text-xl font-bold text-red-400">—</div><div id="highTime" class="text-xs text-gray-500"></div></div>
+      <div><span class="text-gray-400 text-xs">Lowest (Support)</span><div id="low" class="text-xl font-bold text-green-400">—</div><div id="lowTime" class="text-xs text-gray-500"></div></div>
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <div>Drop from high: <span id="drop" class="font-mono">—</span></div>
+        <div>Gain from low: <span id="gain" class="font-mono">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-4">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="font-semibold">Live Log (updates every 3s)</h2>
+      <button class="btn btn-danger text-xs" onclick="clearLog()">Clear</button>
+    </div>
+    <div id="log" class="log text-gray-300"></div>
+  </div>
+</div>
+
+<script>
+const tfSel = document.getElementById("tf");
+tfSel.addEventListener("change", () => {
+  document.getElementById("customTf").classList.toggle("hidden", tfSel.value !== "custom");
+});
+
+let running = false;
+let highest = null, lowest = null, highestTime = "", lowestTime = "";
+let startTime = null;
+let timer = null;
+
+function nowStr(){ return new Date().toLocaleString(); }
+function fmt(p){ return "₱" + Number(p).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+async function fetchPrice(){
+  // Try direct first, then CORS proxy
+  const direct = "https://api.pro.coins.ph/openapi/quote/v1/ticker/24hr?symbol=BTCPHP";
+  const proxy = "https://corsproxy.io/?" + encodeURIComponent(direct);
+  for (const url of [direct, proxy]) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const price = parseFloat(d.lastPrice || d.last || d.price);
+      if (price && !isNaN(price)) return price;
+    } catch(e) {}
+  }
+  throw new Error("Cannot fetch price (CORS/network). Try running backend instead.");
+}
+
+function appendLog(line, html=false){
+  const el = document.getElementById("log");
+  const div = document.createElement("div");
+  if (html) div.innerHTML = line; else div.textContent = line;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog(){ document.getElementById("log").innerHTML = ""; }
+
+async function start(){
+  if (running) return;
+  running = true;
+  highest = null; lowest = null; highestTime = ""; lowestTime = "";
+  startTime = new Date();
+  document.getElementById("statusDot").className = "w-2 h-2 rounded-full bg-green-500";
+  document.getElementById("statusText").textContent = "running";
+  clearLog();
+  appendLog("▶ Started @ " + nowStr());
+  tick();
+  timer = setInterval(tick, 3000);
+}
+
+async function tick(){
+  if (!running) return;
+  try {
+    const cur = await fetchPrice();
+    const now = nowStr();
+    if (highest === null || cur > highest){ highest = cur; highestTime = now; }
+    if (lowest === null || cur < lowest){ lowest = cur; lowestTime = now; }
+    const drop = ((cur - highest)/highest)*100;
+    const gain = ((cur - lowest)/lowest)*100;
+    document.getElementById("cur").textContent = fmt(cur);
+    document.getElementById("high").textContent = fmt(highest);
+    document.getElementById("low").textContent = fmt(lowest);
+    document.getElementById("highTime").textContent = highestTime;
+    document.getElementById("lowTime").textContent = lowestTime;
+    document.getElementById("drop").textContent = drop.toFixed(2) + "%";
+    document.getElementById("gain").textContent = gain.toFixed(2) + "%";
+    const line = `<span style="color:#facc15">⏱ ${now}</span> | <span style="color:#ffffff">Current: ${fmt(cur)}</span> | <span style="color:#4ade80">High: ${fmt(highest)} (${drop.toFixed(2)}%)</span> | <span style="color:#f87171">Low: ${fmt(lowest)} (+${gain.toFixed(2)}%)</span>`;
+    appendLog(line, true);
+    // 24h reset
+    if (new Date() - startTime >= 24*60*60*1000) {
+      appendLog("✅ 24h timeframe completed — reset high/low");
+      highest = cur; lowest = cur; highestTime = now; lowestTime = now; startTime = new Date();
+    }
+  } catch(e) {
+    appendLog("❌ " + e.message);
+  }
+}
+
+function stop(){
+  running = false;
+  if (timer) { clearInterval(timer); timer = null; }
+  document.getElementById("statusDot").className = "w-2 h-2 rounded-full bg-gray-500";
+  document.getElementById("statusText").textContent = "stopped";
+  appendLog("⏹ Stopped @ " + nowStr());
+}
+
+function calc(){
+  const mode = parseInt(document.getElementById("calcMode").value);
+  const low = parseFloat(document.getElementById("calcLow").value);
+  const high = parseFloat(document.getElementById("calcHigh").value);
+  if (isNaN(low) || isNaN(high)) { document.getElementById("calcResult").textContent = "Enter valid numbers"; return; }
+  if (mode === 1) {
+    const pct = ((high - low)/low)*100;
+    document.getElementById("calcResult").textContent = `From ₱${low.toLocaleString()} to ₱${high.toLocaleString()} is a ${pct.toFixed(2)}% increase.`;
+  } else {
+    const pct = ((high - low)/high)*100;
+    document.getElementById("calcResult").textContent = `From ₱${high.toLocaleString()} to ₱${low.toLocaleString()} is a ${pct.toFixed(2)}% decrease.`;
+  }
+}
+</script>
+</body>
+</html>
